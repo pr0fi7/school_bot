@@ -1,12 +1,8 @@
-import os
 import psycopg2
 import psycopg2.extras
-from dotenv import load_dotenv
-from uuid import uuid4
-from datetime import datetime
+
 from config.settings import db_params
 
-load_dotenv()
 
 class Database:
     def __init__(self, conn_params):
@@ -28,6 +24,7 @@ class Database:
                     teacher_id SERIAL PRIMARY KEY,
                     teach_name VARCHAR(100) NOT NULL,
                     teacher_surname VARCHAR(100) NOT NULL
+                    languages_teaching VARCHAR(255)
                 );''')
 
                 cursor.execute('''CREATE TABLE IF NOT EXISTS public.pupils (
@@ -82,7 +79,8 @@ class Database:
     def insert_pupil(self, pupil_name, pupil_surname, languages_learning):
         with self.conn.cursor() as cursor:
             cursor.execute('''INSERT INTO public.pupils (pupil_name, pupil_surname, languages_learning)
-                              VALUES (%s, %s, %s) RETURNING pupil_id;''', (pupil_name, pupil_surname, languages_learning))
+                              VALUES (%s, %s, %s) RETURNING pupil_id;''',
+                           (pupil_name, pupil_surname, languages_learning))
             pupil_id = cursor.fetchone()[0]
             self.conn.commit()
             return pupil_id
@@ -90,7 +88,7 @@ class Database:
     def insert_conversation(self, teacher_id, pupil_id, conversation_data):
         with self.conn.cursor() as cursor:
             cursor.execute('''INSERT INTO public.conversations (teacher_id, pupil_id, conversation)
-                              VALUES (%s, %s, %s) RETURNING conversation_id;''', 
+                              VALUES (%s, %s, %s) RETURNING conversation_id;''',
                            (teacher_id, pupil_id, psycopg2.extras.Json(conversation_data)))
             conversation_id = cursor.fetchone()[0]
             self.conn.commit()
@@ -100,7 +98,7 @@ class Database:
         with self.conn.cursor() as cursor:
             cursor.execute('''UPDATE public.conversations
                               SET conversation = %s
-                              WHERE conversation_id = %s;''', 
+                              WHERE conversation_id = %s;''',
                            (psycopg2.extras.Json(conversation_data), conversation_id))
             self.conn.commit()
 
@@ -108,22 +106,18 @@ class Database:
         with self.conn.cursor() as cursor:
             cursor.execute('''DELETE FROM public.conversations WHERE conversation_id = %s;''', (conversation_id,))
             self.conn.commit()
-    
+
     def get_all_teachers(self):
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute("SELECT * FROM public.teachers")
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-    
+
     def get_all_pupils(self):
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute("SELECT * FROM public.pupils")
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
-    
 
-
-
-print(db_params)
 
 school_db = Database(db_params)
