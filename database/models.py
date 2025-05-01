@@ -39,7 +39,7 @@ class Database:
 
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS public.conversations (
-                    group_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    group_id UUID PRIMARY KEY,
                     branch_id,
                     teacher_id INT REFERENCES public.teachers(teacher_id) ON DELETE CASCADE,
                     pupil_id INT REFERENCES public.pupils(pupil_id) ON DELETE CASCADE,
