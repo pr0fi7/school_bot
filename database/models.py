@@ -40,7 +40,7 @@ class Database:
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS public.conversations (
                     group_id UUID PRIMARY KEY,
-                    branch_id,
+                    branch_id UUID,
                     teacher_id INT REFERENCES public.teachers(teacher_id) ON DELETE CASCADE,
                     pupil_id INT REFERENCES public.pupils(pupil_id) ON DELETE CASCADE,
                     conversation JSONB,

@@ -1,5 +1,5 @@
-import os
 import json
+import os
 
 # Load environment variables from .env file for the db connection
 db_params = {
