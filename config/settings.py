@@ -1,6 +1,10 @@
 import json
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Load environment variables from .env file for the db connection
 db_params = {
     "dbname": os.getenv("DB_NAME"),

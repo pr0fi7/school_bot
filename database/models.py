@@ -1,7 +1,10 @@
 import psycopg2
 import psycopg2.extras
+from dotenv import load_dotenv
 
 from config.settings import db_params
+
+load_dotenv()
 
 
 class Database:
@@ -9,26 +12,36 @@ class Database:
         self.conn = psycopg2.connect(**conn_params)
         self._create_tables()
 
+    # Create tables
+
     def _create_tables(self):
         with self.conn.cursor() as cursor:
             self.conn.autocommit = True
             try:
-                cursor.execute('''DO $$ 
-                BEGIN 
-                    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto') THEN
-                        CREATE EXTENSION pgcrypto;
-                    END IF;
-                END $$;''')
+                cursor.execute('''
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto'
+                        ) THEN
+                            CREATE EXTENSION pgcrypto;
+                        END IF;
+                    END
+                    $$;
+                ''')
 
-                cursor.execute('''CREATE TABLE IF NOT EXISTS public.teachers (
-                    teacher_id SERIAL PRIMARY KEY,
-                    teach_name VARCHAR(100) NOT NULL,
-                    teacher_surname VARCHAR(100) NOT NULL
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS public.teachers (
+                    teacher_id BIGINT PRIMARY KEY,
+                    group_id BIGINT NOT NULL UNIQUE,
+                    teacher_name VARCHAR(100) NOT NULL,
+                    teacher_surname VARCHAR(100) NOT NULL,
                     languages_teaching VARCHAR(255)
                 );''')
 
-                cursor.execute('''CREATE TABLE IF NOT EXISTS public.pupils (
-                    pupil_id SERIAL PRIMARY KEY,
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS public.pupils (
+                    pupil_id BIGINT PRIMARY KEY,
                     pupil_name VARCHAR(100) NOT NULL,
                     pupil_surname VARCHAR(100) NOT NULL,
                     languages_learning VARCHAR(255)
@@ -36,16 +49,18 @@ class Database:
 
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS public.conversations (
-                    group_id UUID PRIMARY KEY,
-                    branch_id UUID,
-                    teacher_id INT REFERENCES public.teachers(teacher_id) ON DELETE CASCADE,
-                    pupil_id INT REFERENCES public.pupils(pupil_id) ON DELETE CASCADE,
+                    conversation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    group_id BIGINT REFERENCES public.teachers(group_id) ON DELETE CASCADE,
+                    branch_id BIGINT,
+                    teacher_id BIGINT REFERENCES public.teachers(teacher_id) ON DELETE CASCADE,
+                    pupil_id BIGINT REFERENCES public.pupils(pupil_id) ON DELETE CASCADE,
                     conversation JSONB,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );''')
 
-                cursor.execute('''CREATE TABLE IF NOT EXISTS public.admins (
-                    admin_id SERIAL PRIMARY KEY,
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS public.admins (
+                    admin_id BIGINT PRIMARY KEY,
                     admin_name VARCHAR(100) NOT NULL,
                     admin_surname VARCHAR(100) NOT NULL,
                     admin_username VARCHAR(100) NOT NULL UNIQUE,
@@ -56,40 +71,35 @@ class Database:
             finally:
                 self.conn.autocommit = False
 
+    # Admin queries
+
+    def get_all_admins(self):
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute("SELECT * FROM public.admins")
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    # Conversation queries
+
     def get_all_conversations(self):
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute("SELECT * FROM public.conversations")
             rows = cursor.fetchall()
-            return [dict(row) for row in rows]  # Convert to JSON format
+            return [dict(row) for row in rows]
 
-    def get_conversation(self, branch_id):
+    def get_conversation(self, group_id: int, branch_id: int):
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-            cursor.execute("SELECT * FROM public.conversations WHERE branch_id = %s", (branch_id,))
+            cursor.execute(
+                """SELECT * FROM public.conversations WHERE group_id  = %s AND branch_id = %s""",
+                (group_id, branch_id))
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def insert_teacher(self, teach_name, teacher_surname):
+    def insert_conversation(self, group_id, branch_id, teacher_id, pupil_id, conversation_data):
         with self.conn.cursor() as cursor:
-            cursor.execute('''INSERT INTO public.teachers (teach_name, teacher_surname)
-                              VALUES (%s, %s) RETURNING teacher_id;''', (teach_name, teacher_surname))
-            teacher_id = cursor.fetchone()[0]
-            self.conn.commit()
-            return teacher_id
-
-    def insert_pupil(self, pupil_name, pupil_surname, languages_learning):
-        with self.conn.cursor() as cursor:
-            cursor.execute('''INSERT INTO public.pupils (pupil_name, pupil_surname, languages_learning)
-                              VALUES (%s, %s, %s) RETURNING pupil_id;''',
-                           (pupil_name, pupil_surname, languages_learning))
-            pupil_id = cursor.fetchone()[0]
-            self.conn.commit()
-            return pupil_id
-
-    def insert_conversation(self, teacher_id, pupil_id, conversation_data):
-        with self.conn.cursor() as cursor:
-            cursor.execute('''INSERT INTO public.conversations (teacher_id, pupil_id, conversation)
-                              VALUES (%s, %s, %s) RETURNING conversation_id;''',
-                           (teacher_id, pupil_id, psycopg2.extras.Json(conversation_data)))
+            cursor.execute('''INSERT INTO public.conversations (group_id, branch_id, teacher_id, pupil_id, conversation)
+                              VALUES (%s, %s, %s, %s, %s) RETURNING conversation_id;''',
+                           (group_id, branch_id, teacher_id, pupil_id, psycopg2.extras.Json(conversation_data)))
             conversation_id = cursor.fetchone()[0]
             self.conn.commit()
             return conversation_id
@@ -107,17 +117,62 @@ class Database:
             cursor.execute('''DELETE FROM public.conversations WHERE conversation_id = %s;''', (conversation_id,))
             self.conn.commit()
 
+    # Teacher queries
+
     def get_all_teachers(self):
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute("SELECT * FROM public.teachers")
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
+    def get_teacher(self, teacher_id: int) -> dict | None:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute(
+                "SELECT * FROM public.teachers WHERE teacher_id = %s",
+                (teacher_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def insert_teacher(self, teacher_id, group_id, teach_name, teacher_surname, languages_teaching):
+        with self.conn.cursor() as cursor:
+            cursor.execute('''INSERT INTO public.teachers (teacher_id, group_id, teach_name, teacher_surname, languages_teaching)
+                              VALUES (%s, %s, %s, %s, %s) RETURNING teacher_id;''',
+                           (teacher_id, group_id, teach_name, teacher_surname, languages_teaching))
+            teacher = cursor.fetchone()[0]
+            self.conn.commit()
+            return teacher
+
+    # Pupil queries
+
     def get_all_pupils(self):
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute("SELECT * FROM public.pupils")
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
+
+    def get_pupil(self, pupil_id: int) -> dict | None:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute(
+                "SELECT * FROM public.pupils WHERE pupil_id = %s",
+                (pupil_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def insert_pupil(self, pupil_id, pupil_name, pupil_surname, languages_learning):
+        with self.conn.cursor() as cursor:
+            cursor.execute('''INSERT INTO public.pupils (pupil_id, pupil_name, pupil_surname, languages_learning)
+                              VALUES (%s, %s, %s, %s) RETURNING pupil_id;''',
+                           (pupil_id, pupil_name, pupil_surname, languages_learning))
+            pupil = cursor.fetchone()[0]
+            self.conn.commit()
+            return pupil
+
+    def delete_pupil(self, pupil_id):
+        with self.conn.cursor() as cursor:
+            cursor.execute('''DELETE FROM public.pupils WHERE pupil_id = %s;''', (pupil_id,))
+            self.conn.commit()
 
 
 school_db = Database(db_params)
