@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes, MessageHandler, filters, ConversationHand
 from database.models import school_db
 
 from .permissions import is_pupil, is_admin, is_teacher
-from .keyboard import language_keyboard, registration_keyboard, cancel_button
+from .keyboards import language_keyboard, registration_keyboard, cancel_button
 from .admin import notify_all_admins
 
 # Info for registration

@@ -6,7 +6,7 @@ from database.models import school_db
 from .permissions import is_admin
 from .messages import declined_request, new_student_notification, teacher_new_pupil_notification, \
     student_assigned_teacher_notification
-from .keyboard import admin_keyboard, back_button
+from .keyboards import admin_keyboard, back_button
 
 
 # Connecting all buttons
@@ -40,7 +40,7 @@ async def handle_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        text=f"Для відміни перевірки заявок, можете натиснути кнопку Назад",
+        text=f"Для відміни перевірки заявок - натиснути кнопку Назад",
         reply_markup=back_button
     )
 
@@ -206,8 +206,8 @@ async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def register_admin(application):
     application.add_handler(CommandHandler("admin", show_admin_panel))
 
-    application.add_handler(MessageHandler(filters.Text("Заявки учнів📜"), handle_requests))
-    application.add_handler(MessageHandler(filters.Text("Назад"), handle_admin_back))
+    application.add_handler(MessageHandler(filters.Text("Заявки учнів 📜"), handle_requests))
+    application.add_handler(MessageHandler(filters.Text("Назад ◀️"), handle_admin_back))
 
     application.add_handler(CallbackQueryHandler(handle_request_navigation, pattern=r"^request_(prev|next)$"))
     application.add_handler(CallbackQueryHandler(handle_request_action, pattern=r"^request_(decline|assign)_\d+$"))
