@@ -15,7 +15,7 @@ db_params = {
 }
 
 # get trigger words from JSON file
-with open("config/trigger_words.json", "r") as file:
+with open("config/trigger_words.json", "r", encoding="utf-8") as file:
     trigger_words = file.read()
     trigger_words = json.loads(trigger_words)
     trigger_words_list = trigger_words["trigger_words"]
