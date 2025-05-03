@@ -29,9 +29,6 @@ def declined_request(pupil_name: str, pupil_surname: str) -> str:
 
 
 def teacher_new_pupil_notification(pupil_name: str, pupil_surname: str) -> str:
-    """
-    SMS, яке надсилається викладачеві, коли йому призначають нового учня.
-    """
     return f"""👋 Привіт!
 
 У вас новий учень для занять:
@@ -42,9 +39,6 @@ def teacher_new_pupil_notification(pupil_name: str, pupil_surname: str) -> str:
 
 
 def student_assigned_teacher_notification(teacher_name: str, teacher_surname: str) -> str:
-    """
-    SMS, яке надсилається учневі, коли йому призначають викладача.
-    """
     return f"""🎉 Вітаємо!
 
 Вам призначено викладача:

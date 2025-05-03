@@ -6,7 +6,7 @@ from database.models import school_db
 from .permissions import is_admin
 from .messages import declined_request, new_student_notification, teacher_new_pupil_notification, \
     student_assigned_teacher_notification
-from .handlers import admin_keyboard, back_button
+from .keyboard import admin_keyboard, back_button
 
 
 # Connecting all buttons
