@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 
 from .admin import show_admin_panel
-from .conversation import show_pupil_panel, show_teacher_panel
+from .conversation import show_pupil_panel
 from .messages import welcome_message
 from .permissions import is_pupil, is_admin, is_teacher
 from .registration import show_registration_panel
@@ -19,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     elif is_teacher(user.id):
-        await show_teacher_panel(update, context)
+        print("teacher")
         return
 
     await update.message.reply_text(welcome_message(user.first_name))

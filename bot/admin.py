@@ -57,14 +57,10 @@ async def send_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     request_panel = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("◀️ Назад", callback_data="request_prev"),
-            InlineKeyboardButton("Далі ▶️", callback_data="request_next"),
-        ],
-        [
-            InlineKeyboardButton("Відхилити ❌", callback_data=f"request_decline_{pupil['pupil_id']}"),
-            InlineKeyboardButton("Призначити ✅", callback_data=f"request_assign_{pupil['pupil_id']}")
-        ]
+        [InlineKeyboardButton("◀️ Назад", callback_data="request_prev"),
+         InlineKeyboardButton("Далі ▶️", callback_data="request_next")],
+        [InlineKeyboardButton("Відхилити ❌", callback_data=f"request_decline_{pupil['pupil_id']}"),
+         InlineKeyboardButton("Призначити ✅", callback_data=f"request_assign_{pupil['pupil_id']}")]
     ])
 
     if update.callback_query:
@@ -125,8 +121,10 @@ async def handle_request_action(update: Update, context: ContextTypes.DEFAULT_TY
     language = requests[index]["languages_learning"]
 
     teachers = [
-        teacher for teacher in school_db.get_all_teachers()
+        teacher
+        for teacher in school_db.get_all_teachers()
         if language in teacher["languages_teaching"].split(",")
+           and teacher.get("group_id", 0) < 0
     ]
     if not teachers:
         await query.edit_message_text("Немає викладачів з такою мовою ❌")
@@ -299,11 +297,11 @@ async def send_teacher_request(update: Update, context: ContextTypes.DEFAULT_TYP
     if update.callback_query:
         await update.callback_query.edit_message_text(text, reply_markup=panel)
     else:
-        await update.message.reply_text(text, reply_markup=panel)
         await update.message.reply_text(
             text=f"Щоб повернутися до панелі, натисніть кнопку нижче 🔽",
             reply_markup=back_button
         )
+        await update.message.reply_text(text, reply_markup=panel)
 
 
 async def handle_teacher_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -394,7 +392,7 @@ def register_admin(application):
     application.add_handler(CommandHandler("admin", show_admin_panel))
 
     application.add_handler(MessageHandler(filters.Text("Заявки учнів 📜"), handle_requests))
-    application.add_handler(MessageHandler(filters.Text("Заявки викладачів📜"), handle_teacher_requests))
+    application.add_handler(MessageHandler(filters.Text("Заявки викладачів 📜"), handle_teacher_requests))
     application.add_handler(MessageHandler(filters.Text("◀️ Назад"), handle_admin_back))
 
     application.add_handler(CallbackQueryHandler(handle_request_navigation, pattern=r"^request_(prev|next)$"))

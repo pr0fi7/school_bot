@@ -52,7 +52,6 @@ async def handle_start_registration(update: Update, context: ContextTypes.DEFAUL
 
 async def handle_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["name"] = update.message.text
-    role = context.user_data['role']
     await update.message.reply_text(f"Чудово, {update.message.text}! 🙌\n"
                                     f"Тепер, будь ласка, введіть своє прізвище:",
                                     reply_markup=cancel_button)

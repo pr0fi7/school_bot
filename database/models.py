@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
@@ -45,7 +47,8 @@ class Database:
                     pupil_id BIGINT PRIMARY KEY,
                     pupil_name VARCHAR(100) NOT NULL,
                     pupil_surname VARCHAR(100) NOT NULL,
-                    languages_learning VARCHAR(255)
+                    languages_learning VARCHAR(255),
+                    is_online BOOLEAN DEFAULT FALSE NOT NULL
                 );''')
 
                 cursor.execute('''
@@ -135,6 +138,14 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def get_conversation_by_pupil(self, pupil_id: int):
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute(
+                """SELECT * FROM public.conversations WHERE pupil_id = %s""",
+                (pupil_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
     def insert_conversation(self, group_id, branch_id, teacher_id, pupil_id, conversation_data):
         with self.conn.cursor() as cursor:
             cursor.execute('''INSERT INTO public.conversations (group_id, branch_id, teacher_id, pupil_id, conversation)
@@ -146,15 +157,67 @@ class Database:
 
     def update_conversation(self, conversation_id, conversation_data):
         with self.conn.cursor() as cursor:
-            cursor.execute('''UPDATE public.conversations
-                              SET conversation = %s
-                              WHERE conversation_id = %s;''',
-                           (psycopg2.extras.Json(conversation_data), conversation_id))
+            cursor.execute(
+                '''UPDATE public.conversations SET conversation = %s WHERE conversation_id = %s;''',
+                (psycopg2.extras.Json(conversation_data), conversation_id)
+            )
             self.conn.commit()
 
     def delete_conversation(self, conversation_id):
         with self.conn.cursor() as cursor:
-            cursor.execute('''DELETE FROM public.conversations WHERE conversation_id = %s;''', (conversation_id,))
+            cursor.execute(
+                '''DELETE FROM public.conversations WHERE conversation_id = %s;''',
+                (conversation_id,)
+            )
+            self.conn.commit()
+
+    # JSONB-manipulation methods
+    def append_conversation_message(self, conversation_id: str,
+                                    sender: str, msg_type: str,
+                                    content: str, message_id: int = None):
+        entry = {
+            "from": sender,
+            "timestamp": datetime.utcnow().isoformat(),
+            "type": msg_type,
+            "content": content
+        }
+        if message_id is not None:
+            entry["message_id"] = message_id
+
+        with self.conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE public.conversations
+                SET conversation =
+                    CASE
+                        WHEN conversation IS NULL THEN %s::jsonb
+                        ELSE conversation || %s::jsonb
+                    END
+                WHERE conversation_id = %s;
+                """,
+                (
+                    psycopg2.extras.Json([entry]),
+                    psycopg2.extras.Json(entry),
+                    conversation_id
+                )
+            )
+            self.conn.commit()
+
+    def get_conversation_messages(self, conversation_id: str) -> list:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute(
+                "SELECT conversation FROM public.conversations WHERE conversation_id = %s;",
+                (conversation_id,)
+            )
+            row = cursor.fetchone()
+            return row['conversation'] if row and row['conversation'] is not None else []
+
+    def clear_conversation_messages(self, conversation_id: str):
+        with self.conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE public.conversations SET conversation = '[]' WHERE conversation_id = %s;",
+                (conversation_id,)
+            )
             self.conn.commit()
 
     # Pupil queries
@@ -173,6 +236,12 @@ class Database:
             )
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    def update_pupil_online(self, online, pupil_id):
+        with self.conn.cursor() as cursor:
+            cursor.execute('''UPDATE public.pupils SET is_online = %s WHERE pupil_id = %s;''',
+                           (online, pupil_id))
+            self.conn.commit()
 
     def insert_pupil(self, pupil_id, pupil_name, pupil_surname, languages_learning):
         with self.conn.cursor() as cursor:
@@ -226,7 +295,6 @@ class Database:
         with self.conn.cursor() as cursor:
             cursor.execute('''DELETE FROM public.teachers WHERE teacher_id = %s;''', (teacher_id,))
             self.conn.commit()
-
 
 
 school_db = Database(db_params)
