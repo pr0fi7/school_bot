@@ -39,10 +39,12 @@ async def handle_start_registration(update: Update, context: ContextTypes.DEFAUL
     text = update.message.text
     if text == "Зареєструватися як учень 📝":
         context.user_data['role'] = 'pupil'
-        prompt = "👋 Привіт! Розкажи, будь ласка, як тебе звати:"
+        prompt = ("Вітаю! 👋\n"
+                  "Скажіть, будь ласка, як Вас звати:")
     else:
         context.user_data['role'] = 'teacher'
-        prompt = "👋 Привіт, вчителю! Як тебе звати:"
+        prompt = ("Вітаю, вчителю! 👋\n"
+                  "Скажіть, будь ласка, як Вас звати:")
 
     await update.message.reply_text(prompt, reply_markup=cancel_button)
     return NAME
@@ -51,7 +53,8 @@ async def handle_start_registration(update: Update, context: ContextTypes.DEFAUL
 async def handle_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["name"] = update.message.text
     role = context.user_data['role']
-    await update.message.reply_text(f"🙌 Чудово, {update.message.text}! Тепер прошу, будь ласка, прізвище.",
+    await update.message.reply_text(f"Чудово, {update.message.text}! 🙌\n"
+                                    f"Тепер, будь ласка, введіть своє прізвище:",
                                     reply_markup=cancel_button)
     return SURNAME
 
@@ -61,9 +64,9 @@ async def handle_surname(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     role = context.user_data['role']
     if role == 'pupil':
-        text = "🌟 Чудово! Яку мову ти мрієш опанувати? Обирай зі списку ⬇️"
+        text = "Яку мову Ви мрієте опанувати? Обирай зі списку: ⬇️"
     else:
-        text = "🌟 Чудово! Яку мову ти плануєш викладати? Обирай зі списку ⬇️"
+        text = "Яку мову Ви плануєте викладати? Обирай зі списку: ⬇️"
 
     await update.message.reply_text(text, reply_markup=language_keyboard)
     return LANGUAGE
@@ -77,7 +80,8 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     language = update.message.text.rsplit(" ", 1)[0]
 
     await update.message.reply_text(
-        f"🎉 Дякуємо за реєстрацію, {name} {surname}!\nТи обрав(ла) {language}.\nОчікуй підтвердження ⏳",
+        f"Дякуємо за реєстрацію, {name} {surname}!🎉\n"
+        f"Очікуйте підтвердження протягом певного часу⏳",
         reply_markup=ReplyKeyboardRemove()
     )
 
@@ -90,6 +94,7 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot=context.bot,
         name=name,
         surname=surname,
+        role=role,
         language=language
     )
 
@@ -100,7 +105,7 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_timeout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "❌ Реєстрацію скасовано.",
+        "Реєстрацію скасовано ❌",
         reply_markup=registration_keyboard
     )
     return ConversationHandler.END
@@ -108,7 +113,7 @@ async def handle_timeout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_invalid_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "⚠️ Обери, будь ласка, одну з мов за допомогою кнопки.",
+        "Обери, будь ласка, одну з мов за допомогою кнопки ⚠️",
         reply_markup=language_keyboard
     )
     return LANGUAGE

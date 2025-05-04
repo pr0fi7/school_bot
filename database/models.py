@@ -205,6 +205,14 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def update_teacher_group(self, teacher_id: int, new_group_id: int):
+        with self.conn.cursor() as cursor:
+            cursor.execute(
+                """UPDATE public.teachers SET group_id = %s WHERE teacher_id = %s;""",
+                (new_group_id, teacher_id)
+            )
+            self.conn.commit()
+
     def insert_teacher(self, teacher_id, teacher_name, teacher_surname, languages_teaching):
         with self.conn.cursor() as cursor:
             cursor.execute('''INSERT INTO public.teachers (teacher_id, teacher_name, teacher_surname, languages_teaching)
@@ -213,6 +221,12 @@ class Database:
             teacher = cursor.fetchone()[0]
             self.conn.commit()
             return teacher
+
+    def delete_teacher(self, teacher_id):
+        with self.conn.cursor() as cursor:
+            cursor.execute('''DELETE FROM public.teachers WHERE teacher_id = %s;''', (teacher_id,))
+            self.conn.commit()
+
 
 
 school_db = Database(db_params)

@@ -10,7 +10,7 @@ cancel_button = ReplyKeyboardMarkup(
 )
 
 back_button = ReplyKeyboardMarkup(
-    [[KeyboardButton("Назад ◀️")]],
+    [[KeyboardButton("◀️ Назад")]],
     resize_keyboard=True,
 )
 
