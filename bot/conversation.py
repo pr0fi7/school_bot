@@ -1,17 +1,30 @@
 from datetime import datetime
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import MessageHandler, filters, ContextTypes
 
 from bot.admin import handle_admin_back
+from bot.messages import admin_notification_sms
 from bot.permissions import is_pupil, is_teacher, is_admin
-from bot.keyboards import pupil_keyboard, back_button
+from bot.keyboards import pupil_keyboard, back_button, teacher_keyboard
+from bot.trigger_words import trigger_words
+
 from database.models import school_db
 
 CHAT_WITH = 'chat_with'
 
 
 # Connecting all buttons
+
+async def show_teacher_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+
+    if is_teacher(user.id):
+        await update.message.reply_text(
+            "Оберіть опцію нижче для початку дії",
+            reply_markup=teacher_keyboard
+        )
+
 
 async def show_pupil_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -63,6 +76,8 @@ async def handle_pupil_to_teacher_message(update: Update, context: ContextTypes.
     conv = school_db.get_conversation_by_pupil(user_id)
 
     if context.user_data.get(CHAT_WITH) == 'teacher':
+        await check_message(update, context, msg, conv, "pupil")
+
         await context.bot.copy_message(
             from_chat_id=msg.chat.id,
             chat_id=conv['group_id'],
@@ -82,6 +97,8 @@ async def handle_teacher_message(update: Update, context: ContextTypes.DEFAULT_T
         return await update.message.reply_text("Не знайдено розмову для цього потоку.")
 
     pupil = school_db.get_pupil(conv['pupil_id'])
+
+    await check_message(update, context, msg, conv, "teacher")
 
     if pupil['is_online']:
         await context.bot.copy_message(
@@ -103,8 +120,7 @@ async def handle_teacher_message(update: Update, context: ContextTypes.DEFAULT_T
             message_id=msg.message_id
         )
 
-
-# Admin and pupil chatting
+# Admin and pupil requesting
 
 # TODO: admin chat, keep it for future
 # async def start_pupil_admin_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -145,8 +161,50 @@ async def handle_teacher_message(update: Update, context: ContextTypes.DEFAULT_T
 #             text=f"Адміністратор: {text}\n[{now}]"
 #         )
 
+# Admin and teacher requesting
+
+
+# Mass notifying
+
+async def teacher_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return
+
+async def teacher_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return
+
 
 # Additional handlers
+
+async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE, msg, conv, sender):
+    raw_text = msg.text or msg.caption or ""
+    result = await trigger_words(raw_text)
+    if result['status']:
+        admins = school_db.get_all_admins()
+        pupil = school_db.get_pupil(conv['pupil_id'])
+        teacher = school_db.get_teacher(conv['teacher_id'])
+
+        chat_link = teacher['telegram_invite']
+
+        button = InlineKeyboardButton(text="🔗 Відкрити чат", url=chat_link)
+        markup = InlineKeyboardMarkup([[button]])
+
+        for admin in admins:
+            tg_id = admin.get("admin_id")
+            text = admin_notification_sms(
+                sender=sender,
+                student_name=pupil['pupil_name'],
+                student_surname=pupil['pupil_surname'],
+                teacher_name=teacher['teacher_name'],
+                teacher_surname=teacher['teacher_surname'],
+                message_text=raw_text,
+                sent_at=datetime.now()
+            )
+            await context.bot.send_message(
+                chat_id=tg_id,
+                text=text,
+                reply_markup=markup
+            )
+
 
 async def exit_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop(CHAT_WITH, None)

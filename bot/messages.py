@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 def welcome_message(user_first_name: str) -> str:
     return f"""Привіт, {user_first_name} 👋🏻
 Вітаємо Вас в чаті онлайн школи UKnow 🎓
@@ -53,3 +56,29 @@ def student_assigned_teacher_notification(teacher_name: str, teacher_surname: st
 👨‍🏫 {teacher_name} {teacher_surname}
 
 Він незабаром зв’яжеться з вами для уточнення розкладу. Гарного навчання! 📚"""
+
+
+def admin_notification_sms(
+        sender: str,
+        student_name: str,
+        student_surname: str,
+        teacher_name: str,
+        teacher_surname: str,
+        message_text: str,
+        sent_at: datetime
+) -> str:
+    date_str = sent_at.strftime("%d.%m.%Y %H:%M")
+
+    if sender.lower() in ("pupil", "student"):
+        sender_full = f"{student_name} {student_surname}"
+    else:
+        sender_full = f"{teacher_name} {teacher_surname}"
+
+
+    return (
+        f"⚠️ Увага!\n"
+        f"Розмова: {student_name} {student_surname} ↔️ {teacher_name} {teacher_surname}\n"
+        f"Відправник: {sender_full}\n"
+        f"Повідомлення: {message_text}\n"
+        f"Дата: {date_str}"
+    )

@@ -57,7 +57,7 @@ async def create_group(title, bot_username, teacher_id, language):
 
     raw_id = new_chan.id
     new_group_id = int(f"-100{raw_id}")
-    school_db.update_teacher_group(teacher_id, new_group_id)
+    school_db.update_teacher_group(teacher_id, new_group_id, invite.link)
     text = (
         f"Вітаю! Ваш запит було схвалено.\n"
         f"Група для комунікації зі студентами створена.\n"

@@ -7,7 +7,7 @@ from database.models import school_db
 from .permissions import is_admin
 from .messages import declined_request, new_student_notification, teacher_new_pupil_notification, \
     student_assigned_teacher_notification, new_teacher_notification
-from .keyboards import admin_keyboard, back_button
+from .keyboards import admin_keyboard, back_button, pupil_keyboard
 
 
 # Connecting all buttons
@@ -24,7 +24,7 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# Requests section for pupils
+# Request section for pupils
 
 async def handle_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pupils = school_db.get_all_pupils()
@@ -255,7 +255,8 @@ async def handle_assign_teacher(update: Update, context: ContextTypes.DEFAULT_TY
 
         await context.bot.send_message(
             chat_id=pupil_id,
-            text=student_assigned_teacher_notification(teacher_name, teacher_surname)
+            text=student_assigned_teacher_notification(teacher_name, teacher_surname),
+            reply_markup=pupil_keyboard
         )
 
     else:
@@ -266,7 +267,7 @@ async def handle_assign_teacher(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data.pop(key, None)
 
 
-# Requests section for teacher
+# Request section for teacher
 
 async def handle_teacher_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     teachers = school_db.get_all_teachers()
@@ -348,8 +349,15 @@ async def handle_teacher_action(update: Update, context: ContextTypes.DEFAULT_TY
     )
     await query.edit_message_text("Заявку викладача підтверджено ✅")
 
+    await show_admin_panel(update, context)
+
     for key in ('admin_teacher_requests', 'teacher_page_index'):
         context.user_data.pop(key, None)
+
+# Find a chat by pupil
+
+
+# Answer to requests
 
 
 # Additional handlers
