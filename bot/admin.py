@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
@@ -26,7 +28,7 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Request section for pupils
 
-async def handle_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_pupil_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pupils = school_db.get_all_pupils()
     conversations = school_db.get_all_conversations()
 
@@ -42,18 +44,18 @@ async def handle_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["admin_requests"] = waiting
     context.user_data["page_index"] = 0
-    await send_request(update, context)
+    await send_pupil_request(update, context)
 
 
-async def send_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def send_pupil_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     index = context.user_data["page_index"]
     queue = context.user_data["admin_requests"]
     pupil = queue[index]
 
     text = (
-        f"📋 Заявка {index + 1}/{len(queue)}\n"
-        f"👤 {pupil['pupil_name']} {pupil['pupil_surname']}\n"
-        f"🌐 Мова: {pupil['languages_learning']}"
+        f"Заявка {index + 1}/{len(queue)} 📋\n"
+        f"{pupil['pupil_name']} {pupil['pupil_surname']} 👤\n"
+        f"Мова: {pupil['languages_learning']} 🌐"
     )
 
     request_panel = InlineKeyboardMarkup([
@@ -77,7 +79,7 @@ async def send_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def handle_request_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_pupil_request_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     action = query.data.split("_")[1]
@@ -88,10 +90,10 @@ async def handle_request_navigation(update: Update, context: ContextTypes.DEFAUL
         else
         (index + 1) % total
     )
-    await send_request(update, context)
+    await send_pupil_request(update, context)
 
 
-async def handle_request_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_pupil_request_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
         return
@@ -273,7 +275,7 @@ async def handle_teacher_requests(update: Update, context: ContextTypes.DEFAULT_
     teachers = school_db.get_all_teachers()
     pending = [t for t in teachers if t['group_id'] > 0]
     if not pending:
-        return await update.message.reply_text("Немає нових заявок від викладачів ❌", reply_markup=back_button)
+        return await update.message.reply_text("Немає нових заявок від викладачів ❌")
 
     context.user_data['admin_teacher_requests'] = pending
     context.user_data['teacher_page_index'] = 0
@@ -285,9 +287,9 @@ async def send_teacher_request(update: Update, context: ContextTypes.DEFAULT_TYP
     queue = context.user_data['admin_teacher_requests']
     teacher = queue[index]
     text = (
-        f"📋 Заявка вчителя {index + 1}/{len(queue)}\n"
-        f"👤 {teacher['teacher_name']} {teacher['teacher_surname']}\n"
-        f"🌐 Мова викладання: {teacher['languages_teaching']}"
+        f"Заявка вчителя {index + 1}/{len(queue)} 📋\n"
+        f"{teacher['teacher_name']} {teacher['teacher_surname']} 👤\n"
+        f"Мова викладання: {teacher['languages_teaching']} 🌐"
     )
     panel = InlineKeyboardMarkup([
         [InlineKeyboardButton("◀️ Назад", callback_data="teacher_prev"),
@@ -354,10 +356,134 @@ async def handle_teacher_action(update: Update, context: ContextTypes.DEFAULT_TY
     for key in ('admin_teacher_requests', 'teacher_page_index'):
         context.user_data.pop(key, None)
 
-# Find a chat by pupil
+
+# Find a chat by pupil or teacher
 
 
 # Answer to requests
+
+async def handle_admin_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+
+    queue = []
+    for pupil in school_db.get_all_pupils():
+        for request in pupil.get("requests_to_admin") or []:
+            queue.append({**request, "role": "Учень", "user_id": pupil["pupil_id"]})
+    for teacher in school_db.get_all_teachers():
+        for request in teacher.get("requests_to_admin") or []:
+            queue.append({**request, "role": "Викладач", "user_id": teacher["teacher_id"]})
+
+    if not queue:
+        return await update.message.reply_text("Немає нових запитів ❌", reply_markup=admin_keyboard)
+
+    await update.message.reply_text(
+        "Перегляньте нижче запити, для детального ознайомлення з цим можете натиснути відповідну кнопку",
+        reply_markup=back_button)
+    context.user_data["admin_requests"] = queue
+    context.user_data["admin_request_index"] = 0
+    await show_admin_request(update, context)
+
+
+async def show_admin_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    index = context.user_data["admin_request_index"]
+    queue = context.user_data["admin_requests"]
+    request = queue[index]
+    total = len(queue)
+
+    if request['role'] == 'Учень':
+        user = school_db.get_pupil(request["user_id"])
+        user_name = user["pupil_name"]
+        user_surname = user["pupil_surname"]
+    else:
+        user = school_db.get_teacher(request["user_id"])
+        user_name = user["teacher_name"]
+        user_surname = user["teacher_surname"]
+
+    dt = datetime.fromisoformat(request["timestamp"])
+    ts = dt.strftime("%d.%m.%Y %H:%M")
+
+    text = (
+        f"Запит {index + 1}/{total} 📨\n"
+        f"{request['role']}: {user_name} {user_surname} \n\n"
+        f"{request['text']}\n\n"
+        f"Дата запиту: {ts}"
+    )
+
+    buttons = [
+        [
+            InlineKeyboardButton("◀️ Назад", callback_data="admin_req_prev"),
+            InlineKeyboardButton("Далі ▶️", callback_data="admin_req_next")
+        ],
+        [
+            InlineKeyboardButton("Переглянути повністю запит", callback_data="admin_req_check")
+        ]
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=markup)
+    else:
+        await update.message.reply_text(text, reply_markup=markup)
+
+
+async def handle_admin_req_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    action = query.data.split("_")[2]
+
+    index = context.user_data["admin_request_index"]
+    total = len(context.user_data["admin_requests"])
+    index = (index - 1) % total if action == "prev" else (index + 1) % total
+    context.user_data["admin_request_index"] = index
+
+    await show_admin_request(update, context)
+
+
+async def handle_admin_req_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    index = context.user_data["admin_request_index"]
+    request = context.user_data["admin_requests"][index]
+
+    await context.bot.copy_message(
+        chat_id=query.message.chat.id,
+        from_chat_id=request["user_id"],
+        message_id=request["message_id"]
+    )
+
+
+async def handle_admin_reply_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return
+    if "admin_requests" not in context.user_data:
+        return
+
+    index = context.user_data["admin_request_index"]
+    request = context.user_data["admin_requests"][index]
+
+    await context.bot.send_message(
+        chat_id=request["user_id"],
+        text="<b>Вітаємо, нижче відповідь на ваш запит ✅</b>",
+        parse_mode="HTML"
+    )
+    await context.bot.copy_message(
+        from_chat_id=update.message.chat.id,
+        chat_id=request["user_id"],
+        message_id=update.message.message_id
+    )
+
+    if request["role"] == "Учень":
+        school_db.clear_pupil_requests(request["user_id"])
+    else:
+        school_db.clear_teacher_requests(request["user_id"])
+
+    context.user_data.pop("admin_requests", None)
+    context.user_data.pop("admin_request_index", None)
+
+    await update.message.reply_text("Відповідь відправлено ✅", reply_markup=admin_keyboard)
 
 
 # Additional handlers
@@ -397,23 +523,61 @@ async def notify_all_admins(bot, name: str, surname: str, role: str, language: s
 
 
 def register_admin(application):
-    application.add_handler(CommandHandler("admin", show_admin_panel))
-
-    application.add_handler(MessageHandler(filters.Text("Заявки учнів 📜"), handle_requests))
-    application.add_handler(MessageHandler(filters.Text("Заявки викладачів 📜"), handle_teacher_requests))
-    application.add_handler(MessageHandler(filters.Text("◀️ Назад"), handle_admin_back))
-
-    application.add_handler(CallbackQueryHandler(handle_request_navigation, pattern=r"^request_(prev|next)$"))
-    application.add_handler(CallbackQueryHandler(handle_request_action, pattern=r"^request_(decline|assign)_\d+$"))
-
-    application.add_handler(CallbackQueryHandler(handle_teacher_navigation, pattern=r"^teacher_(prev|next)$"))
-    application.add_handler(CallbackQueryHandler(handle_teacher_action, pattern=r"^teacher_(decline|confirm)_\d+$"))
-
+    # ── ГРУПА 0 ──
+    # Ловимо текст ВІДПОВІДІ адміністратора на поточний запит
     application.add_handler(
-        CallbackQueryHandler(handle_assign_teacher, pattern=r"^assign_\d+(_\d+)?$")
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_admin_reply_text
+        ),
+        group=0
     )
 
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,
-                                           handle_assign_text))
+    # ── ГРУПА 1 ──
+    # Вся логіка адмін-панелі: /admin, меню, «Запити», навігація по запитах
+    application.add_handler(CommandHandler("admin", show_admin_panel), group=1)
+    application.add_handler(MessageHandler(filters.Text("Заявки учнів 📜"), handle_pupil_requests), group=1)
+    application.add_handler(MessageHandler(filters.Text("Заявки викладачів 📜"), handle_teacher_requests), group=1)
+    application.add_handler(MessageHandler(filters.Text("Запити 📜"), handle_admin_requests), group=1)
 
+    # Кнопки «prev/next» та «переглянути» в адмін-режимі
+    application.add_handler(
+        CallbackQueryHandler(handle_admin_req_nav, pattern=r"^admin_req_(prev|next)$"),
+        group=1
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_admin_req_check, pattern=r"^admin_req_check$"),
+        group=1
+    )
+
+    # (якщо є інші CallbackQueryHandler для pupil/teacher-заявок — теж group=1)
+    application.add_handler(
+        CallbackQueryHandler(handle_pupil_request_navigation, pattern=r"^request_(prev|next)$"),
+        group=1
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_pupil_request_action, pattern=r"^request_(decline|assign)_\d+$"),
+        group=1
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_teacher_navigation, pattern=r"^teacher_(prev|next)$"),
+        group=1
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_teacher_action, pattern=r"^teacher_(decline|confirm)_\d+$"),
+        group=1
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_assign_teacher, pattern=r"^assign_\d+(_\d+)?$"),
+        group=1
+    )
+
+    # ── ГРУПА 2 ──
+    # Catch-all для інших текстових хендлерів (наприклад, handle_assign_text)
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_assign_text),
+        group=2
+    )
+
+    # Ім’ям «notify_all_admins» залишаємо як раніше
     application.bot_data["notify_all_admins"] = notify_all_admins

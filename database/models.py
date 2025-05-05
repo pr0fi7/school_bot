@@ -260,6 +260,32 @@ class Database:
             cursor.execute('''DELETE FROM public.pupils WHERE pupil_id = %s;''', (pupil_id,))
             self.conn.commit()
 
+    def get_pupil_requests(self, pupil_id: int) -> list:
+        pupil = self.get_pupil(pupil_id)
+        return pupil.get("requests_to_admin") or []
+
+    def add_pupil_request(self, pupil_id: int, entry: dict):
+        with self.conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE public.pupils
+                SET requests_to_admin =
+                  COALESCE(requests_to_admin, '[]'::jsonb)
+                  || %s::jsonb
+                WHERE pupil_id = %s;
+                """,
+                (psycopg2.extras.Json([entry]), pupil_id)
+            )
+            self.conn.commit()
+
+    def clear_pupil_requests(self, pupil_id: int):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE public.pupils SET requests_to_admin = '[]' WHERE pupil_id = %s;",
+                (pupil_id,)
+            )
+            self.conn.commit()
+
     # Teacher queries
 
     def get_all_teachers(self):
@@ -297,6 +323,32 @@ class Database:
     def delete_teacher(self, teacher_id):
         with self.conn.cursor() as cursor:
             cursor.execute('''DELETE FROM public.teachers WHERE teacher_id = %s;''', (teacher_id,))
+            self.conn.commit()
+
+    def get_teacher_requests(self, teacher_id: int) -> list:
+        teacher = self.get_teacher(teacher_id)
+        return teacher.get("requests_to_admin") or []
+
+    def add_teacher_request(self, teacher_id: int, entry: dict):
+        with self.conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE public.teachers
+                SET requests_to_admin =
+                  COALESCE(requests_to_admin, '[]'::jsonb)
+                  || %s::jsonb
+                WHERE teacher_id = %s;
+                """,
+                (psycopg2.extras.Json([entry]), teacher_id)
+            )
+            self.conn.commit()
+
+    def clear_teacher_requests(self, teacher_id: int):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE public.teachers SET requests_to_admin = '[]' WHERE teacher_id = %s;",
+                (teacher_id,)
+            )
             self.conn.commit()
 
 

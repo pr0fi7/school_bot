@@ -1,17 +1,18 @@
 from datetime import datetime
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import MessageHandler, filters, ContextTypes
+from telegram.ext import MessageHandler, filters, ContextTypes, ConversationHandler
 
 from bot.admin import handle_admin_back
 from bot.messages import admin_notification_sms
 from bot.permissions import is_pupil, is_teacher, is_admin
-from bot.keyboards import pupil_keyboard, back_button, teacher_keyboard
+from bot.keyboards import pupil_keyboard, back_button, teacher_keyboard, admin_keyboard
 from bot.trigger_words import trigger_words
 
 from database.models import school_db
 
 CHAT_WITH = 'chat_with'
+ADMIN_CHAT = 0
 
 
 # Connecting all buttons
@@ -39,8 +40,17 @@ async def show_pupil_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Teacher and pupil chatting
 
 async def start_pupil_teacher_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_pupil(update.effective_user.id):
+    user_id = update.effective_user.id
+
+    if not is_pupil(user_id):
         return
+
+    conv = school_db.get_conversation_by_pupil(user_id)
+    if not conv or not conv.get('teacher_id'):
+        return await update.message.reply_text(
+            "Вам ще не призначено викладача ❗️"
+            "Будь ласка, зачекайте, доки ми не підберемо для вас викладача 📚"
+        )
 
     context.user_data[CHAT_WITH] = 'teacher'
     school_db.update_pupil_online(True, update.effective_user.id)
@@ -87,14 +97,12 @@ async def handle_pupil_to_teacher_message(update: Update, context: ContextTypes.
 
 
 async def handle_teacher_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_teacher(update.effective_user.id):
+    if not is_teacher(update.effective_user.id) or update.effective_chat.type == 'private':
         return
 
     msg = update.message
 
     conv = school_db.get_conversation(msg.chat_id, msg.message_thread_id)
-    if not conv:
-        return await update.message.reply_text("Не знайдено розмову для цього потоку.")
 
     pupil = school_db.get_pupil(conv['pupil_id'])
 
@@ -120,48 +128,72 @@ async def handle_teacher_message(update: Update, context: ContextTypes.DEFAULT_T
             message_id=msg.message_id
         )
 
-# Admin and pupil requesting
 
-# TODO: admin chat, keep it for future
-# async def start_pupil_admin_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     if not is_pupil(update.effective_user.id):
-#         return
-#
-#     context.user_data[CHAT_WITH] = 'admin'
-#
-#     await update.message.reply_text("💬 Ви в режимі чату з адміністрацією. Ваші вхідні повідомлення:")
-#     queue = context.user_data.get(ADMIN_QUEUE, [])
-#
-#     for text, ts in queue:
-#         await update.message.reply_text(f"{text}\n[{ts}]")
-#
-#     context.user_data[ADMIN_QUEUE] = []
-#     await update.message.reply_text("Щоб вийти з чату, натисніть:", reply_markup=back_button)
+# Requesting to admin
+
+async def start_admin_chat(update, context):
+    if is_pupil(update.message.from_user.id):
+        existing = school_db.get_pupil_requests(update.message.from_user.id)
+    elif is_teacher(update.message.from_user.id):
+        existing = school_db.get_teacher_requests(update.message.from_user.id)
+
+    if existing:
+        await update.message.reply_text(
+            "Ви вже надіслали запит, будь ласка, зачекайте, поки ми обробимо попередній ⚠️"
+        )
+        return
+    context.user_data[CHAT_WITH] = 'admin'
+    await update.message.reply_text(
+        "Будь ласка, надішліть свій запит, щоб адміністрація його розглянула. Запит можна надсилати один раз, далі буде необхідно чекати відповідь 💬",
+        reply_markup=back_button
+    )
 
 
-# TODO: admin chat, keep it for future
-# async def handle_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     if not is_admin(update.effective_user.id):
-#         return
-#
-#     text = update.message.text
-#     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-#     pupil_id = context.user_data.get('current_pupil_id')
-#     if not pupil_id:
-#         await update.message.reply_text("Спочатку виберіть учня для чату.")
-#         return
-#
-#     if context.user_data.get(CHAT_WITH) != 'admin':
-#         queue = context.user_data.setdefault(ADMIN_QUEUE, [])
-#         queue.append((text, now))
-#         await update.message.reply_text("Ваше повідомлення буде доставлено, коли учень увійде в режим чату.")
-#     else:
-#         await context.bot.send_message(
-#             chat_id=pupil_id,
-#             text=f"Адміністратор: {text}\n[{now}]"
-#         )
+async def handle_message_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get(CHAT_WITH) != 'admin':
+        return
 
-# Admin and teacher requesting
+    msg = update.message
+    user_id = msg.from_user.id
+    raw_text = msg.text or msg.caption or ""
+    sent_at = datetime.utcnow().isoformat()
+
+    if is_pupil(user_id):
+        add_request = school_db.add_pupil_request
+        role = "Учень"
+        keyboard = pupil_keyboard
+    elif is_teacher(user_id):
+        add_request = school_db.add_teacher_request
+        role = "Викладач"
+        keyboard = teacher_keyboard
+    else:
+        context.user_data.pop(CHAT_WITH, None)
+        return await msg.reply_text(
+            "Вибачте, надсилати запити можуть лише зареєстровані користувачі ❗️"
+        )
+
+    entry = {
+        "sender_id": user_id,
+        "role": role,
+        "message_id": msg.message_id,
+        "text": raw_text,
+        "timestamp": sent_at
+    }
+    add_request(user_id, entry)
+
+    admins = school_db.get_all_admins()
+    for admin in admins:
+        await context.bot.send_message(
+            chat_id=admin["admin_id"],
+            text="Отримано новий запит. Будь ласка, надайте відповідь у певне визначеному меню 🔔",
+            reply_markup=admin_keyboard
+        )
+
+    context.user_data.pop(CHAT_WITH, None)
+    await msg.reply_text(
+        "Ваш запит надіслано адміністраторам ✅",
+        reply_markup=keyboard
+    )
 
 
 # Mass notifying
@@ -169,7 +201,8 @@ async def handle_teacher_message(update: Update, context: ContextTypes.DEFAULT_T
 async def teacher_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 
-async def teacher_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def admin_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 
 
@@ -216,25 +249,46 @@ async def exit_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def register_conversation(application):
-    application.add_handler(MessageHandler(filters.Text("Викладач 👨‍🏫"), start_pupil_teacher_chat))
-    application.add_handler(MessageHandler(filters.Text("◀️ Назад"), exit_chat))
+    application.add_handler(
+        MessageHandler(filters.Text("Написати адміністратору 👩‍💼"),
+                       start_admin_chat),
+        group=2
+    )
+    application.add_handler(
+        MessageHandler(filters.Text("Написати викладачеві 👨‍🏫"),
+                       start_pupil_teacher_chat),
+        group=0
+    )
+    application.add_handler(
+        MessageHandler(filters.Text("◀️ Назад"),
+                       exit_chat),
+        group=0
+    )
 
     teacher_ids = [t["teacher_id"] for t in school_db.get_all_teachers()]
-    application.add_handler(
-        MessageHandler(filters.ALL & filters.User(teacher_ids), handle_teacher_message)
-    )
-
     pupil_ids = [p["pupil_id"] for p in school_db.get_all_pupils()]
+
     application.add_handler(
         MessageHandler(
-            filters.ALL & ~filters.COMMAND & filters.User(pupil_ids),
-            handle_pupil_to_teacher_message
-        )
+            filters.ALL & ~filters.COMMAND & filters.User(teacher_ids),
+            handle_teacher_message
+        ),
+        group=1
     )
 
-    # TODO: admin chat, keep it for future
-    # application.add_handler(MessageHandler(filters.Text("Адміністратор 👩‍💼"), start_pupil_admin_chat))
-    # admin_ids = [a["admin_id"] for a in school_db.get_all_admins()]
-    # application.add_handler(
-    #     MessageHandler(filters.TEXT & filters.User(admin_ids), handle_admin_message)
-    # )
+    application.add_handler(
+        MessageHandler(
+            filters.ALL & ~filters.COMMAND & filters.User(pupil_ids) & (
+                    filters.ChatType.GROUP | filters.ChatType.SUPERGROUP),
+            handle_pupil_to_teacher_message
+        ),
+        group=1
+    )
+
+    application.add_handler(
+        MessageHandler(
+            filters.ALL & ~filters.COMMAND & filters.User(teacher_ids + pupil_ids),
+            handle_message_to_admin
+        ),
+        group=0
+    )
