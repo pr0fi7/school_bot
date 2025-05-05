@@ -523,8 +523,6 @@ async def notify_all_admins(bot, name: str, surname: str, role: str, language: s
 
 
 def register_admin(application):
-    # ── ГРУПА 0 ──
-    # Ловимо текст ВІДПОВІДІ адміністратора на поточний запит
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -533,14 +531,11 @@ def register_admin(application):
         group=0
     )
 
-    # ── ГРУПА 1 ──
-    # Вся логіка адмін-панелі: /admin, меню, «Запити», навігація по запитах
     application.add_handler(CommandHandler("admin", show_admin_panel), group=1)
     application.add_handler(MessageHandler(filters.Text("Заявки учнів 📜"), handle_pupil_requests), group=1)
     application.add_handler(MessageHandler(filters.Text("Заявки викладачів 📜"), handle_teacher_requests), group=1)
     application.add_handler(MessageHandler(filters.Text("Запити 📜"), handle_admin_requests), group=1)
 
-    # Кнопки «prev/next» та «переглянути» в адмін-режимі
     application.add_handler(
         CallbackQueryHandler(handle_admin_req_nav, pattern=r"^admin_req_(prev|next)$"),
         group=1
@@ -550,7 +545,6 @@ def register_admin(application):
         group=1
     )
 
-    # (якщо є інші CallbackQueryHandler для pupil/teacher-заявок — теж group=1)
     application.add_handler(
         CallbackQueryHandler(handle_pupil_request_navigation, pattern=r"^request_(prev|next)$"),
         group=1
@@ -572,12 +566,9 @@ def register_admin(application):
         group=1
     )
 
-    # ── ГРУПА 2 ──
-    # Catch-all для інших текстових хендлерів (наприклад, handle_assign_text)
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_assign_text),
         group=2
     )
 
-    # Ім’ям «notify_all_admins» залишаємо як раніше
     application.bot_data["notify_all_admins"] = notify_all_admins
