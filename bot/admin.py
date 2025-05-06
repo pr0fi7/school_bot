@@ -359,6 +359,87 @@ async def handle_teacher_action(update: Update, context: ContextTypes.DEFAULT_TY
 
 # Find a chat by pupil or teacher
 
+async def start_chat_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    context.user_data["chat_search"] = True
+    await update.message.reply_text("Введіть ім'я або прізвище учня чи вчителя 🔎", reply_markup=back_button)
+
+
+async def handle_chat_search_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data.get("chat_search"):
+        return
+
+    term = update.message.text.strip().lower().split()
+    buttons = []
+    if len(term) == 2:
+        name, surname = term
+        teacher = next((
+            t for t in school_db.get_all_teachers()
+            if t["teacher_name"].lower() == name and t["teacher_surname"].lower() == surname
+        ), None)
+        if teacher:
+            buttons.append([
+                InlineKeyboardButton(f"Вчитель: {teacher['teacher_name']} {teacher['teacher_surname']}",
+                                     callback_data=f"open_chat_teacher_{teacher['teacher_id']}")
+            ])
+        else:
+            pupil = next((
+                p for p in school_db.get_all_pupils()
+                if p["pupil_name"].lower() == name and p["pupil_surname"].lower() == surname
+            ), None)
+            if pupil:
+                buttons.append([
+                    InlineKeyboardButton(f"Учень: {pupil['pupil_name']} {pupil['pupil_surname']}",
+                                         callback_data=f"open_chat_pupil_{pupil['pupil_id']}")
+                ])
+
+    if not buttons and len(term) >= 1:
+        key = term[0]
+        for t in school_db.get_all_teachers():
+            if key in t["teacher_name"].lower() or key in t["teacher_surname"].lower():
+                buttons.append([
+                    InlineKeyboardButton(
+                        f"Вчитель: {t['teacher_name']} {t['teacher_surname']}",
+                        callback_data=f"open_chat_teacher_{t['teacher_id']}"
+                    )
+                ])
+        for p in school_db.get_all_pupils():
+            if key in p["pupil_name"].lower() or key in p["pupil_surname"].lower():
+                buttons.append([
+                    InlineKeyboardButton(
+                        f"Учень: {p['pupil_name']} {p['pupil_surname']}",
+                        callback_data=f"open_chat_pupil_{p['pupil_id']}"
+                    )
+                ])
+
+    if not buttons:
+        return await update.message.reply_text("❌ Нічого не знайдено. Спробуйте інше ім'я.")
+
+    panel = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text("Оберіть чат:", reply_markup=panel)
+
+
+async def handle_open_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data.split("_")
+    role, uid = data[2], int(data[3])
+
+    if role == "teacher":
+        teacher = school_db.get_teacher(uid)
+        link = teacher.get("telegram_invite")
+        text = f"Чат викладача:\n{link}"
+    else:
+        conv = school_db.get_conversation_by_pupil(uid)
+        if not conv:
+            return await query.edit_message_text("❌ Для цього учня чат ще не створено.")
+        teacher = school_db.get_teacher(conv["teacher_id"])
+        link = teacher.get("telegram_invite")
+        text = f"Чат учня (через викладача {teacher['teacher_name']}):\n{link}"
+
+    await query.message.reply_text(text, reply_markup=admin_keyboard)
+
 
 # Answer to requests
 
@@ -534,8 +615,11 @@ def register_admin(application):
     application.add_handler(CommandHandler("admin", show_admin_panel), group=1)
     application.add_handler(MessageHandler(filters.Text("Заявки учнів 📜"), handle_pupil_requests), group=1)
     application.add_handler(MessageHandler(filters.Text("Заявки викладачів 📜"), handle_teacher_requests), group=1)
+    application.add_handler(
+        MessageHandler(filters.Text("Знайти чат 🔎"), start_chat_search),
+        group=1
+    )
     application.add_handler(MessageHandler(filters.Text("Запити 📜"), handle_admin_requests), group=1)
-
 
     application.add_handler(
         CallbackQueryHandler(handle_admin_req_nav, pattern=r"^admin_req_(prev|next)$"),
@@ -564,6 +648,16 @@ def register_admin(application):
     )
     application.add_handler(
         CallbackQueryHandler(handle_assign_teacher, pattern=r"^assign_\d+(_\d+)?$"),
+        group=1
+    )
+
+    application.add_handler(
+        CallbackQueryHandler(handle_open_chat, pattern=r"^open_chat_(teacher|pupil)_\d+$"),
+        group=1
+    )
+
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat_search_input),
         group=1
     )
 
