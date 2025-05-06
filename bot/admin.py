@@ -536,6 +536,7 @@ def register_admin(application):
     application.add_handler(MessageHandler(filters.Text("Заявки викладачів 📜"), handle_teacher_requests), group=1)
     application.add_handler(MessageHandler(filters.Text("Запити 📜"), handle_admin_requests), group=1)
 
+
     application.add_handler(
         CallbackQueryHandler(handle_admin_req_nav, pattern=r"^admin_req_(prev|next)$"),
         group=1

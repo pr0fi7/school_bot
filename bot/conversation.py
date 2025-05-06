@@ -22,7 +22,7 @@ async def show_teacher_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if is_teacher(user.id):
         await update.message.reply_text(
-            "Оберіть опцію нижче для початку дії",
+            "Оберіть опцію нижче для початку дії:",
             reply_markup=teacher_keyboard
         )
 
@@ -32,7 +32,7 @@ async def show_pupil_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if is_pupil(user.id):
         await update.message.reply_text(
-            "Оберіть опцію нижче, з ким ви хочете зв'язатися",
+            "Оберіть опцію нижче, з ким ви хочете зв'язатися:",
             reply_markup=pupil_keyboard
         )
 
@@ -199,11 +199,88 @@ async def handle_message_to_admin(update: Update, context: ContextTypes.DEFAULT_
 # Mass notifying
 
 async def teacher_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return
+    msg = update.message
+    user_id = msg.from_user.id
+    text = msg.text or ""
+
+    if not is_teacher(user_id):
+        return
+
+    if text == "Повідомити усіх учнів 🔔":
+        context.user_data["broadcast_teacher"] = True
+        return await msg.reply_text(
+            "Введіть повідомлення для всіх ваших учнів: ✉️",
+            reply_markup=back_button
+        )
+
+    if not context.user_data.get("broadcast_teacher"):
+        return
+
+    raw_text = msg.text or msg.caption or ""
+    sent_at = datetime.utcnow().isoformat()
+
+    result = await trigger_words(raw_text)
+    if result["status"]:
+        teacher = school_db.get_teacher(user_id)
+        admins = school_db.get_all_admins()
+        for adm in admins:
+            await context.bot.send_message(
+                chat_id=adm["admin_id"],
+                text=f"⚠️ Викладач {teacher['teacher_name']} {teacher['teacher_surname']} намагався розіслати з тригер-словом:\n{raw_text}\n\n{sent_at}"
+            )
+        context.user_data.pop("broadcast_teacher", None)
+        return
+
+    convs = [c for c in school_db.get_all_conversations() if c["teacher_id"] == user_id]
+
+    for conv in convs:
+        group_id = conv["group_id"]
+        branch_id = conv["branch_id"]
+
+        await context.bot.copy_message(
+            chat_id=group_id,
+            message_thread_id=branch_id,
+            from_chat_id=msg.chat.id,
+            message_id=msg.message_id
+        )
+
+    await msg.reply_text("✅ Ваше повідомлення надіслано всім учням.", reply_markup=teacher_keyboard)
+    context.user_data.pop("broadcast_teacher", None)
 
 
 async def admin_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return
+    msg = update.message
+    user_id = msg.from_user.id
+    text = msg.text or ""
+
+    if not is_admin(user_id):
+        return
+
+    if text == "Повідомити усіх вчителів 🔔":
+        context.user_data["broadcast_admin"] = True
+        return await msg.reply_text(
+            "✉️ Введіть повідомлення, яке потрібно розіслати всім вчителям: ✉️",
+            reply_markup=back_button
+        )
+
+    if not context.user_data.get("broadcast_admin"):
+        return
+
+    teachers = school_db.get_all_teachers()
+    for t in teachers:
+        tid = t["teacher_id"]
+        await context.bot.send_message(
+            chat_id=tid,
+            text="Повідомлення від адміністрації 📢"
+        )
+        await context.bot.copy_message(
+            chat_id=tid,
+            from_chat_id=msg.chat.id,
+            message_id=msg.message_id
+        )
+
+    await msg.reply_text("✅ Ваше повідомлення надіслано всім вчителям.", reply_markup=admin_keyboard)
+    context.user_data.pop("broadcast_admin", None)
 
 
 # Additional handlers
@@ -240,10 +317,12 @@ async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE, msg,
 
 
 async def exit_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.pop(CHAT_WITH, None)
+    context.user_data.clear()
+
     if is_pupil(update.effective_user.id):
         await update.message.reply_text("Ви вийшли з чату.", reply_markup=pupil_keyboard)
         school_db.update_pupil_online(False, update.effective_user.id)
+
     if is_admin(update.effective_user.id):
         await handle_admin_back(update, context)
 
@@ -254,6 +333,23 @@ def register_conversation(application):
                        start_admin_chat),
         group=2
     )
+
+    application.add_handler(
+        MessageHandler(
+            filters.ALL & ~filters.COMMAND,
+            teacher_notyfing
+        ),
+        group=3
+    )
+
+    application.add_handler(
+        MessageHandler(
+            filters.ALL & ~filters.COMMAND,
+            admin_notyfing
+        ),
+        group=2
+    )
+
     application.add_handler(
         MessageHandler(filters.Text("Написати викладачеві 👨‍🏫"),
                        start_pupil_teacher_chat),
