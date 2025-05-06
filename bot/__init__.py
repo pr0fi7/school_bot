@@ -4,8 +4,9 @@ from dotenv import load_dotenv
 from telegram.ext import ApplicationBuilder
 
 # Turning on all functions of bot
-from .registration import register_registration
 from .commands import register_commands
+from .registration import register_registration
+from .conversation import register_conversation
 from .admin import register_admin
 
 load_dotenv()
@@ -18,6 +19,7 @@ def build_application():
 
     register_commands(application)
     register_registration(application)
+    register_conversation(application)
     register_admin(application)
 
     return application

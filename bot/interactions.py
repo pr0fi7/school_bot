@@ -1,4 +1,3 @@
-
 from telegram import Update
 
 
@@ -17,9 +16,8 @@ async def welcome(update: Update, context):
                     Тисніть кнопки нижче для зв'язку з викладачем ⬇️""",
                 parse_mode="HTML"
             )
-            
+
             await update.message.reply_image(
                 photo="public/images/image.jpg",
                 caption="Вітаємо в UKnow!",
             )
-
