@@ -105,8 +105,6 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         school_db.insert_pupil(user_id, name, surname, language)
     elif role == 'teacher':
         school_db.insert_teacher(user_id, name, surname, language)
-    elif role == 'admin':
-        school_db.insert_admin(user_id, name, surname, language)
 
     await notify_all_admins(
         bot=context.bot,
