@@ -102,6 +102,11 @@ async def create_group(title, bot_username, teacher_id, language):
     ))
 
     print("Channel ready: reverted to forum channel, users invited, general topic closed, bot got admin rights. ✅")
+    # 7) Close the session
+    await client.disconnect()
+
+
+
 
 import asyncio
 from telethon import TelegramClient, functions, types
@@ -113,7 +118,6 @@ dotenv.load_dotenv()
 # Load environment variables from .env file
 api_id   = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
-
 
 async def main(phone, title, bot_username, teacher_username, language):
     # 1) Create the client and start it (login + save session)
@@ -183,10 +187,11 @@ async def main(phone, title, bot_username, teacher_username, language):
     print("✅ All done.")
     await client.disconnect()  # clean up
 
-if __name__ == '__main__':
-    phone   = '+32471069627'
-    title   = 'My channel – English'
-    bot     = '@uknow_uk_bot'
-    teacher = '@pr0fi8'
-    lang    = 'English'
-    asyncio.run(main(phone, title, bot, teacher, lang))
+
+# if __name__ == '__main__':
+#     phone   = '+32471069627'
+#     title   = 'My channel – English'
+#     bot     = '@uknow_uk_bot'
+#     teacher = '@pr0fi8'
+#     lang    = 'English'
+#     asyncio.run(main(phone, title, bot, teacher, lang))

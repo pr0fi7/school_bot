@@ -49,7 +49,8 @@ class Database:
                     pupil_surname VARCHAR(100) NOT NULL,
                     languages_learning VARCHAR(255),
                     is_online BOOLEAN DEFAULT FALSE NOT NULL,
-                    requests_to_admin JSONB
+                    requests_to_admin JSONB,
+                    birth_date DATE
                 );''')
 
                 cursor.execute('''
@@ -146,6 +147,21 @@ class Database:
             cursor.execute(
                 """SELECT * FROM public.conversations WHERE pupil_id = %s""",
                 (pupil_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        
+    def get_conversation_by_teacher_and_pupil(self, teacher_id: int, pupil_id: int):
+        """Fetch the single conversation linking this teacher & pupil, or None."""
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT *
+                  FROM public.conversations
+                 WHERE teacher_id = %s
+                   AND pupil_id   = %s
+                """,
+                (teacher_id, pupil_id)
+            )
             row = cursor.fetchone()
             return dict(row) if row else None
 
@@ -247,6 +263,7 @@ class Database:
             self.conn.commit()
 
     def insert_pupil(self, pupil_id, pupil_name, pupil_surname, languages_learning):
+
         with self.conn.cursor() as cursor:
             cursor.execute('''INSERT INTO public.pupils (pupil_id, pupil_name, pupil_surname, languages_learning)
                               VALUES (%s, %s, %s, %s) RETURNING pupil_id;''',
@@ -254,6 +271,15 @@ class Database:
             pupil = cursor.fetchone()[0]
             self.conn.commit()
             return pupil
+    
+    def update_pupil_birthday(self, pupil_id: int, birth_date: str):
+        with self.conn.cursor() as cursor:
+            cursor.execute(
+                '''UPDATE public.pupils SET birth_date = %s WHERE pupil_id = %s;''',
+                (birth_date, pupil_id)
+            )
+            self.conn.commit()
+            return pupil_id
 
     def delete_pupil(self, pupil_id):
         with self.conn.cursor() as cursor:

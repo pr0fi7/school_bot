@@ -37,10 +37,6 @@ async def show_pupil_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=pupil_keyboard
         )
 
-
-
-# Teacher and pupil chatting
-
 async def start_pupil_teacher_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -261,6 +257,7 @@ async def admin_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if text == "Повідомити усіх вчителів 🔔":
+        print("Sending message to all teachers")
         context.user_data["broadcast_admin"] = True
         return await msg.reply_text(
             "✉️ Введіть повідомлення, яке потрібно розіслати всім вчителям: ✉️",
@@ -286,6 +283,39 @@ async def admin_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.reply_text("✅ Ваше повідомлення надіслано всім вчителям.", reply_markup=admin_keyboard)
     context.user_data.pop("broadcast_admin", None)
 
+async def admin_notyfing_pupils(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    user_id = msg.from_user.id
+    text = msg.text or ""
+
+    if not is_admin(user_id):
+        return
+
+    if text == "Повідомити усіх учнів 🔔":
+        context.user_data["broadcast_admin_pupils"] = True
+        return await msg.reply_text(
+            "✉️ Введіть повідомлення, яке потрібно розіслати всім учням: ✉️",
+            reply_markup=back_button
+        )
+
+    if not context.user_data.get("broadcast_admin_pupils"):
+        return
+
+    pupils = school_db.get_all_pupils()
+    for t in pupils:
+        tid = t["pupil_id"]
+        await context.bot.send_message(
+            chat_id=tid,
+            text="Повідомлення від адміністрації 📢"
+        )
+        await context.bot.copy_message(
+            chat_id=tid,
+            from_chat_id=msg.chat.id,
+            message_id=msg.message_id
+        )
+
+    await msg.reply_text("✅ Ваше повідомлення надіслано всім учням.", reply_markup=admin_keyboard)
+    context.user_data.pop("broadcast_admin_pupils", None)
 
 # Additional handlers
 
@@ -340,18 +370,29 @@ def register_conversation(application):
         group=2
     )
 
+    # 1. Handle the “notify all teachers” button
     application.add_handler(
         MessageHandler(
-            filters.ALL & ~filters.COMMAND,
-            teacher_notyfing
+            filters.Text("Повідомити усіх вчителів 🔔"),
+            admin_notyfing
         ),
-        group=3
+        group=2
     )
+
+    # 2. Handle the “notify all pupils” button
+    application.add_handler(
+        MessageHandler(
+            filters.Text("Повідомити усіх учнів 🔔"),
+            admin_notyfing_pupils
+        ),
+        group=2
+    )
+
 
     application.add_handler(
         MessageHandler(
             filters.ALL & ~filters.COMMAND,
-            admin_notyfing
+            admin_notyfing_pupils
         ),
         group=2
     )
@@ -380,8 +421,10 @@ def register_conversation(application):
 
     application.add_handler(
         MessageHandler(
-            filters.ALL & ~filters.COMMAND & filters.User(pupil_ids) & (
-                    filters.ChatType.GROUP | filters.ChatType.SUPERGROUP),
+            filters.ALL
+            & ~filters.COMMAND
+            & filters.User(pupil_ids)
+            & filters.ChatType.PRIVATE,
             handle_pupil_to_teacher_message
         ),
         group=1

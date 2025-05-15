@@ -10,9 +10,13 @@ from .permissions import is_admin
 from .messages import declined_request, new_student_notification, teacher_new_pupil_notification, \
     student_assigned_teacher_notification, new_teacher_notification
 from .keyboards import admin_keyboard, back_button, pupil_keyboard
+import aiogram
+from aiogram.methods.delete_forum_topic import DeleteForumTopic
+
 
 
 # Connecting all buttons
+
 
 async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -268,6 +272,91 @@ async def handle_assign_teacher(update: Update, context: ContextTypes.DEFAULT_TY
     for key in ("assign_state_teachers", "pupil_id", "admin_requests", "page_index"):
         context.user_data.pop(key, None)
 
+
+async def open_assignment_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+    # fetch all active pupil–teacher links
+    convos = school_db.get_all_conversations()
+    if not convos:
+        return await update.message.reply_text(
+            "Наразі немає жодного призначення.",
+            reply_markup=admin_keyboard
+        )
+
+    for c in convos:
+        teacher = school_db.get_teacher(c["teacher_id"])
+        pupil   = school_db.get_pupil(c["pupil_id"])
+        label = f"{pupil['pupil_name']} {pupil['pupil_surname']} → " \
+                f"{teacher['teacher_name']} {teacher['teacher_surname']}"
+
+        buttons = [
+            InlineKeyboardButton(
+                "Зняти призначення ❌",
+                callback_data=f"clear_{teacher['teacher_id']}_{pupil['pupil_id']}"
+            )
+        ]
+        kb = InlineKeyboardMarkup([buttons])
+        await update.message.reply_text(label, reply_markup=kb)
+
+
+async def handle_clear_assignment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    # parse “clear_<teacher_id>_<pupil_id>`
+    _, raw_tid, raw_pid = query.data.split("_")
+    teacher_id = int(raw_tid)
+    pupil_id   = int(raw_pid)
+
+    # — look up the DB record —
+    conv = school_db.get_conversation_by_teacher_and_pupil(teacher_id, pupil_id)
+    if not conv:
+        return await query.edit_message_text(
+            "❗️ Це призначення вже скасовано.",
+            reply_markup=admin_keyboard
+        )
+
+    # — delete the link —
+    school_db.delete_conversation(conv["conversation_id"])
+
+    # — remove the topic —
+    bot = aiogram.Bot(token=context.bot.token)
+    await bot(DeleteForumTopic(chat_id=conv["group_id"],
+                                message_thread_id=conv["branch_id"]))
+
+    # remove inline buttons on the _same_ message:
+    await query.edit_message_text(
+        "Призначення успішно знято ❌",
+        reply_markup=None
+    )
+    # then send your normal admin keyboard fresh:
+    await context.bot.send_message(
+        chat_id=update.effective_user.id,
+        text="Оберіть дію:",
+        reply_markup=admin_keyboard
+    )
+
+
+    # — notify both sides —
+    teacher = school_db.get_teacher(teacher_id)
+    pupil   = school_db.get_pupil(pupil_id)
+
+    await context.bot.send_message(
+        chat_id=teacher_id,
+        text=(
+            f"Адміністратор зняв призначення учня "
+            f"{pupil['pupil_name']} {pupil['pupil_surname']}."
+        )
+    )
+    await context.bot.send_message(
+        chat_id=pupil_id,
+        text=(
+            "Ваше призначення до викладача "
+            f"{teacher['teacher_name']} {teacher['teacher_surname']} знято."
+        ),
+        reply_markup=pupil_keyboard
+    )
 
 # Request section for teacher
 
@@ -604,6 +693,7 @@ async def notify_all_admins(bot, name: str, surname: str, role: str, language: s
 
 
 def register_admin(application):
+    
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -615,6 +705,10 @@ def register_admin(application):
     application.add_handler(CommandHandler("admin", show_admin_panel), group=1)
     application.add_handler(MessageHandler(filters.Text("Заявки учнів 📜"), handle_pupil_requests), group=1)
     application.add_handler(MessageHandler(filters.Text("Заявки викладачів 📜"), handle_teacher_requests), group=1)
+    application.add_handler(
+        MessageHandler(filters.Text("Керувати призначеннями ⚙️"), open_assignment_manager),
+        group=1
+    )
     application.add_handler(
         MessageHandler(filters.Text("Знайти чат 🔎"), start_chat_search),
         group=1
@@ -665,5 +759,19 @@ def register_admin(application):
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_assign_text),
         group=2
     )
+
+    # … other filters.Text(…) handlers …
+
+
+    # NOW the catch-all reply-text handler, in a later group:
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_reply_text),
+        group=2
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_clear_assignment, pattern=r"^clear_\d+_\d+$"),
+        group=2
+    )
+
 
     application.bot_data["notify_all_admins"] = notify_all_admins
