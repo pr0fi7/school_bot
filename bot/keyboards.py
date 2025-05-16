@@ -49,7 +49,8 @@ registration_keyboard = ReplyKeyboardMarkup(registration_buttons, resize_keyboar
 admin_panel = [
     [KeyboardButton("Заявки учнів 📜"), KeyboardButton("Заявки викладачів 📜")],
     [KeyboardButton("Знайти чат 🔎"), KeyboardButton("Запити 📜")],
-    [KeyboardButton("Повідомити усіх вчителів 🔔")]
+    [KeyboardButton("Повідомити усіх вчителів 🔔"), KeyboardButton("Видалити сповіщення учням 🗑️")],
+    [KeyboardButton("Повідомити усіх учнів 🔔"), KeyboardButton("Видалити сповіщення вчителям 🗑️")]
 ]
 admin_keyboard = ReplyKeyboardMarkup(admin_panel, resize_keyboard=True)
 
