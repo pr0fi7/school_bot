@@ -256,31 +256,131 @@ async def admin_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(user_id):
         return
 
+    if text == "Видалити сповіщення вчителям 🗑️":
+        return await delete_teacher_notifications(update, context)
+
     if text == "Повідомити усіх вчителів 🔔":
         context.user_data["broadcast_admin"] = True
         return await msg.reply_text(
             "✉️ Введіть повідомлення, яке потрібно розіслати всім вчителям: ✉️",
-            reply_markup=back_button
+            reply_markup=back_button,
         )
 
     if not context.user_data.get("broadcast_admin"):
         return
 
+    school_db.clear_teacher_notifications(user_id)
+
     teachers = school_db.get_all_teachers()
     for t in teachers:
         tid = t["teacher_id"]
-        await context.bot.send_message(
+
+        header_msg = await context.bot.send_message(
             chat_id=tid,
-            text="Повідомлення від адміністрації 📢"
+            text="Повідомлення від адміністрації 📢",
         )
-        await context.bot.copy_message(
+        body_msg = await context.bot.copy_message(
             chat_id=tid,
             from_chat_id=msg.chat.id,
-            message_id=msg.message_id
+            message_id=msg.message_id,
         )
 
-    await msg.reply_text("✅ Ваше повідомлення надіслано всім вчителям.", reply_markup=admin_keyboard)
+        school_db.set_teacher_notification(
+            admin_id=user_id,
+            teacher_id=tid,
+            header_id=header_msg.message_id,
+            body_id=body_msg.message_id,
+        )
+
+    await msg.reply_text(
+        "✅ Ваше повідомлення надіслано всім вчителям.",
+        reply_markup=admin_keyboard,
+    )
     context.user_data.pop("broadcast_admin", None)
+
+async def delete_teacher_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    admin_id = msg.from_user.id
+    if not is_admin(admin_id):
+        return
+
+    data = school_db.get_teacher_notifications(admin_id)
+    if not data:
+        return await msg.reply_text("Немає сповіщень для видалення.")
+
+    for tid, (header_id, body_id) in data.items():
+        for mid in (header_id, body_id):
+            await context.bot.delete_message(chat_id=int(tid), message_id=mid)
+
+    school_db.clear_teacher_notifications(admin_id)
+    await msg.reply_text("✅ Сповіщення вчителям видалено.")
+
+async def admin_pupil_notyfing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    user_id = msg.from_user.id
+    text = msg.text or ""
+
+    if not is_admin(user_id):
+        return
+
+    if text == "Видалити сповіщення учням 🗑️":
+        return await delete_pupil_notifications(update, context)
+
+    if text == "Повідомити усіх учнів 🔔":
+        context.user_data["broadcast_admin_pupil"] = True
+        return await msg.reply_text(
+            "✉️ Введіть повідомлення, яке потрібно розіслати всім учням: ✉️",
+            reply_markup=back_button,
+        )
+
+    if not context.user_data.get("broadcast_admin_pupil"):
+        return
+
+    school_db.clear_pupil_notifications(user_id)
+
+    pupils = school_db.get_all_pupils()
+    for p in pupils:
+        pid = p["pupil_id"]
+
+        header_msg = await context.bot.send_message(
+            chat_id=pid,
+            text="Повідомлення від адміністрації 📢",
+        )
+        body_msg = await context.bot.copy_message(
+            chat_id=pid,
+            from_chat_id=msg.chat.id,
+            message_id=msg.message_id,
+        )
+
+        school_db.set_pupil_notification(
+            admin_id=user_id,
+            pupil_id=pid,
+            header_id=header_msg.message_id,
+            body_id=body_msg.message_id,
+        )
+
+    await msg.reply_text(
+        "✅ Ваше повідомлення надіслано всім учням.",
+        reply_markup=admin_keyboard,
+    )
+    context.user_data.pop("broadcast_admin_pupil", None)
+
+async def delete_pupil_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    admin_id = msg.from_user.id
+    if not is_admin(admin_id):
+        return
+
+    data = school_db.get_pupil_notifications(admin_id)
+    if not data:
+        return await msg.reply_text("Немає сповіщень для видалення.")
+
+    for pid, (header_id, body_id) in data.items():
+        for mid in (header_id, body_id):
+            await context.bot.delete_message(chat_id=int(pid), message_id=mid)
+
+    school_db.clear_pupil_notifications(admin_id)
+    await msg.reply_text("✅ Сповіщення учням видалено.")
 
 
 # Additional handlers
@@ -346,6 +446,14 @@ def register_conversation(application):
         MessageHandler(
             filters.ALL & ~filters.COMMAND,
             admin_notyfing
+        ),
+        group=2
+    )
+
+    application.add_handler(
+        MessageHandler(
+            filters.ALL & ~filters.COMMAND,
+            admin_pupil_notyfing
         ),
         group=2
     )

@@ -117,53 +117,73 @@ class Database:
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-    def add_pupil_notification(self, admin_id: int, message_id: int):
-        with self.conn.cursor() as cursor:
-            cursor.execute("""
-                UPDATE public.admins
-                SET pupil_notifications = COALESCE(pupil_notifications, '[]'::jsonb) || to_jsonb(%s)
-                WHERE admin_id = %s;
-            """, (message_id, admin_id))
+    def clear_teacher_notifications(self, admin_id: int):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE public.admins SET teacher_notifications = '{}' WHERE admin_id = %s;",
+                (admin_id,)
+            )
             self.conn.commit()
-
-    def add_teacher_notification(self, admin_id: int, message_id: int):
-        with self.conn.cursor() as cursor:
-            cursor.execute("""
-                UPDATE public.admins
-                SET teacher_notifications = COALESCE(teacher_notifications, '[]'::jsonb) || to_jsonb(%s)
-                WHERE admin_id = %s;
-            """, (message_id, admin_id))
-            self.conn.commit()
-
-    def get_pupil_notifications(self, admin_id: int) -> list:
-        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-            cursor.execute("""
-                SELECT pupil_notifications FROM public.admins WHERE admin_id = %s;
-            """, (admin_id,))
-            row = cursor.fetchone()
-            return row["pupil_notifications"] if row and row["pupil_notifications"] else []
-
-    def get_teacher_notifications(self, admin_id: int) -> list:
-        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-            cursor.execute("""
-                SELECT teacher_notifications FROM public.admins WHERE admin_id = %s;
-            """, (admin_id,))
-            row = cursor.fetchone()
-            return row["teacher_notifications"] if row and row["teacher_notifications"] else []
 
     def clear_pupil_notifications(self, admin_id: int):
-        with self.conn.cursor() as cursor:
-            cursor.execute("""
-                UPDATE public.admins SET pupil_notifications = '[]' WHERE admin_id = %s;
-            """, (admin_id,))
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE public.admins SET pupil_notifications = '{}' WHERE admin_id = %s;",
+                (admin_id,)
+            )
             self.conn.commit()
 
-    def clear_teacher_notifications(self, admin_id: int):
-        with self.conn.cursor() as cursor:
-            cursor.execute("""
-                UPDATE public.admins SET teacher_notifications = '[]' WHERE admin_id = %s;
-            """, (admin_id,))
+    def set_teacher_notification(self, admin_id: int,
+                                 teacher_id: int,
+                                 header_id: int,
+                                 body_id: int):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE public.admins
+                SET teacher_notifications =
+                      COALESCE(teacher_notifications, '{}'::jsonb)
+                      || jsonb_build_object(%s::text, jsonb_build_array(%s, %s))
+                WHERE admin_id = %s;
+                """,
+                (teacher_id, header_id, body_id, admin_id)
+            )
             self.conn.commit()
+
+    def set_pupil_notification(self, admin_id: int,
+                               pupil_id: int,
+                               header_id: int,
+                               body_id: int):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE public.admins
+                SET pupil_notifications =
+                      COALESCE(pupil_notifications, '{}'::jsonb)
+                      || jsonb_build_object(%s::text, jsonb_build_array(%s, %s))
+                WHERE admin_id = %s;
+                """,
+                (pupil_id, header_id, body_id, admin_id)
+            )
+            self.conn.commit()
+
+    def get_teacher_notifications(self, admin_id: int) -> dict:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                "SELECT teacher_notifications FROM public.admins WHERE admin_id = %s;",
+                (admin_id,)
+            )
+            row = cur.fetchone()
+            return row["teacher_notifications"] or {}
+
+    def get_pupil_notifications(self, admin_id: int) -> dict:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute(
+                "SELECT pupil_notifications FROM public.admins WHERE admin_id = %s;",
+                (admin_id,)
+            )
+            row = cur.fetchone()
+            return row["pupil_notifications"] or {}
 
     # Config queries
 
