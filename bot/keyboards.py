@@ -68,7 +68,7 @@ admin_panel = [
 admin_keyboard = ReplyKeyboardMarkup(admin_panel, resize_keyboard=True)
 
 teacher_buttons = [
-    [KeyboardButton("Повідомити усіх учнів 🔔")],
+    # [KeyboardButton("Повідомити моїх учнів 🔔")],
     [KeyboardButton("Написати адміністратору 👩‍💼")]
 ]
 teacher_keyboard = ReplyKeyboardMarkup(teacher_buttons, resize_keyboard=True)
@@ -78,3 +78,17 @@ pupil_buttons = [
     [KeyboardButton("Написати адміністратору 👩‍💼")]
 ]
 pupil_keyboard = ReplyKeyboardMarkup(pupil_buttons, resize_keyboard=True)
+
+# After teacher broadcast:
+delete_teachers_kb = ReplyKeyboardMarkup(
+    [[ KeyboardButton("Видалити сповіщення вчителям") ]],
+    one_time_keyboard=True,
+    resize_keyboard=True
+)
+
+# After pupil broadcast:
+delete_pupils_kb = ReplyKeyboardMarkup(
+    [[ KeyboardButton("Видалити сповіщення учням") ]],
+    one_time_keyboard=True,
+    resize_keyboard=True
+)

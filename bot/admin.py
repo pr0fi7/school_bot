@@ -125,6 +125,9 @@ async def handle_pupil_request_action(update: Update, context: ContextTypes.DEFA
     requests = context.user_data["admin_requests"]
     index = context.user_data["page_index"]
     language = requests[index]["languages_learning"]
+    
+    school_db.update_pupil_status(pupil_id, "active")
+
 
     teachers = [
         teacher
@@ -438,7 +441,11 @@ async def handle_teacher_action(update: Update, context: ContextTypes.DEFAULT_TY
     context.application.create_task(
         create_group(title, bot_username, teacher_id, teacher['languages_teaching'])
     )
+    # 
+
     await query.edit_message_text("Заявку викладача підтверджено ✅")
+
+    school_db.update_teacher_status(teacher_id, "active")
 
     await show_admin_panel(update, context)
 
@@ -670,26 +677,23 @@ async def handle_admin_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=admin_keyboard
     )
 
+from telegram.error import BadRequest
 
-async def notify_all_admins(bot, name: str, surname: str, role: str, language: str):
+async def notify_all_admins(bot, name, surname, role, language):
     admins = school_db.get_all_admins()
-    for admin in admins:
-        tg_id = admin.get("admin_id")
-        if tg_id:
-            if role == "pupil":
-                text = new_student_notification(name, surname, language)
-                await bot.send_message(
-                    chat_id=tg_id,
-                    text=text,
-                    reply_markup=admin_keyboard
-                )
-            else:
-                text = new_teacher_notification(name, surname, language)
-                await bot.send_message(
-                    chat_id=tg_id,
-                    text=text,
-                    reply_markup=admin_keyboard
-                )
+    for adm in admins:
+        chat_id = adm["admin_id"]
+        try:
+            text = (new_student_notification(name, surname, language)
+                    if role=="pupil"
+                    else new_teacher_notification(name, surname, language))
+            await bot.send_message(chat_id=chat_id, text=text, reply_markup=admin_keyboard)
+        except BadRequest as e:
+            # e.message will be “Chat not found” or “Forbidden” etc.
+            print(f"Skipping admin {chat_id}: {e.message}")
+        except Exception as e:
+            # catch anything else so one bad send doesn’t abort the loop
+            print(f"Unexpected error sending to {chat_id}: {e}")
 
 
 def register_admin(application):

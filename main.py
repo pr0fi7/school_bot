@@ -13,6 +13,9 @@ if __name__ == "__main__":
     #populate_admins
     counter = 0 
     for admin_id in ADMIN_ID_LIST:
+        if school_db.get_admin(admin_id):
+            print(f"Admin with ID {admin_id} already exists.")
+            continue
         counter += 1
         school_db.insert_admin(
             
