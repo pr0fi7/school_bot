@@ -1,23 +1,21 @@
-version: '3.8'
-
 services:
   bot:
-    build: .  # Builds the bot image from Dockerfile
+    build: .
     container_name: telegram_bot
     command: python main.py
     env_file:
-      - .env   # Contains TELEGRAM_TOKEN, DB_USER, DB_PASSWORD, DB_NAME
-    environment:
-      - DB_HOST=db  # Use the database service hostname
+      - .env   # contains TELEGRAM_TOKEN and DB_* vars
     depends_on:
       - db
 
   db:
     image: postgres:13
-    container_name: postgres_db
+    container_name: postgres
     restart: always
-    env_file:
-      - .env   # Provides POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (=DB_NAME)
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
